@@ -1,0 +1,29 @@
+maven depedencies :
+```xml
+    <dependencies>
+        <dependency>
+            <groupId>fr.daliush.searchable</groupId>
+            <artifactId>searchable-annotations</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>21</source><target>21</target>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>fr.daliush.searchable</groupId>
+                            <artifactId>searchable-processor</artifactId>
+                            <version>1.0-SNAPSHOT</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+```

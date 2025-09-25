@@ -40,12 +40,12 @@ public class SearchableProcessor extends AbstractProcessor {
         if (searchableRepoIface == null) return false;
 
         for (Element root : roundEnv.getRootElements()) {
-            //If it's not an interface, it's none of our business
-            if (root.getKind() != ElementKind.INTERFACE) continue;
+            //If it's not a class, it's none of our business
+            if (root.getKind() != ElementKind.CLASS) continue;
             TypeElement clazz = (TypeElement) root;
 
-            if (ReflexionUtils.classImplementsInterface(clazz, searchableRepoIface, types)) {
-
+            //We check if the class has @SearchableEntity set
+            if (hasSearchableEntityAnnotation(clazz)) {
                 try {
                     generator.generateImplForRepository(clazz);
                 } catch (Exception e) {
@@ -74,4 +74,20 @@ public class SearchableProcessor extends AbstractProcessor {
         }
         return false;
     }
+
+    /**
+     * Checks if a class has the @SearchableEntity annotation
+     * @param clazz the class you wanna test
+     * @return true if the class has @SearchableEntity, false otherwise
+     */
+    public boolean hasSearchableEntityAnnotation(TypeElement clazz) {
+        TypeMirror searchableEntityAnnotation = elements.getTypeElement("fr.daliush.searchable.annotations.SearchableEntity").asType();
+        for (AnnotationMirror am : clazz.getAnnotationMirrors()) {
+            if (types.isSameType(am.getAnnotationType(), searchableEntityAnnotation)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 }

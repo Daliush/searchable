@@ -6,17 +6,21 @@ import fr.daliush.searchable.processor.utils.ReflexionUtils;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
+import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public class ImplGenerator {
@@ -25,6 +29,7 @@ public class ImplGenerator {
     private final Elements elements;
     private final Messager messager;
     private final Types types;
+    private static final String SEARCHABLE_ANNOTATION = "fr.daliush.searchable.annotations.Searchable";
 
     public ImplGenerator(ProcessingEnvironment env) {
         this.filer = env.getFiler();
@@ -33,50 +38,50 @@ public class ImplGenerator {
         this.types = env.getTypeUtils();
     }
 
-    public void generateImplForRepository(TypeElement repoInterface) throws IOException {
-        String pkg = ReflexionUtils.getPackageNameOfClass(repoInterface, elements);
+    public void generateImplForRepository(TypeElement entity) throws IOException
+    {
+        String pkg = ReflexionUtils.getPackageNameOfClass(entity, elements);
 
-        String implName = ReflexionUtils.generateImplementationName(repoInterface);
+        String implName = ReflexionUtils.generateImplementationName(entity);
 
         // Generates a public class
         TypeSpec.Builder searchClass = TypeSpec.classBuilder(implName)
-                .addModifiers(Modifier.PUBLIC)
-                .addSuperinterface(ClassName.get(repoInterface.asType()));
+                .addModifiers(Modifier.PUBLIC);
 
         // @Generated annotation so we that the class is generated and by wich package it has been generated
         searchClass.addAnnotation(AnnotationSpec.builder(javax.annotation.processing.Generated.class)
                 .addMember("value", "$S", "fr.daliush.searchable.processor.SearchableProcessor")
                 .build());
 
+        List<VariableElement> searchableFields = findDeclaredSearchableFields(entity);
+        generateMethods(searchableFields, searchClass);
 
-        TypeElement base = elements.getTypeElement("fr.daliush.searchable.annotations.SearchableRepository");
-        Optional<TypeMirror> searchRepoInterface = ReflexionUtils.getInterfaceFromImplements(repoInterface, base, types);
+        JavaFile javaFile = buildJavaFile(pkg, searchClass);
+        javaFile.writeTo(filer);
 
-        if(searchRepoInterface.isPresent()) {
-            if(searchRepoInterface.get() instanceof DeclaredType dt) {
-                generateMethods(dt, searchClass);
+        messager.printMessage(Diagnostic.Kind.NOTE,
+                "Generated " + pkg + "." + implName + " for " + entity.getQualifiedName());
 
-                JavaFile javaFile = buildJavaFile(pkg, searchClass);
-                javaFile.writeTo(filer);
-
-                messager.printMessage(Diagnostic.Kind.NOTE,
-                        "Generated " + pkg + "." + implName + " for " + repoInterface.getQualifiedName());
-            }
-        } else {
-            messager.printMessage(Diagnostic.Kind.ERROR,
-                    repoInterface + " Does not implements SearchableRepository");
-        }
     }
 
+    /**
+     * Builds the java class ( actually write it )
+     * @param pkg the package of the class
+     * @param searchClass the builder of the class
+     * @return the actual java file
+     */
     private static JavaFile buildJavaFile(String pkg, TypeSpec.Builder searchClass) {
         return JavaFile.builder(pkg, searchClass.build())
                 .skipJavaLangImports(true)
                 .build();
     }
 
-    private void generateMethods(DeclaredType dt, TypeSpec.Builder type) {
-        Element entity = types.asElement(dt.getTypeArguments().getFirst());
-        List<VariableElement> searchableFields = ReflexionUtils.findDeclaredSearchableFields(entity);
+    /**
+     * Génère les méthodes de la classe repository générée
+     * @param searchableFields les fields annotés @Searchable
+     * @param type The class to build
+     */
+    private void generateMethods(List<VariableElement> searchableFields,TypeSpec.Builder type) {
         searchableFields.forEach(
                 field -> {
                     MethodSpec empty = MethodSpec.methodBuilder(field.getSimpleName().toString())
@@ -88,5 +93,48 @@ public class ImplGenerator {
                 }
         );
     }
+
+    /**
+     * Gets declared @Searchable fields inside a class
+     * @param type the class
+     * @return a List of all the fields
+     */
+    List<VariableElement> findDeclaredSearchableFields(TypeElement type) {
+        return ElementFilter.fieldsIn(type.getEnclosedElements()).stream()
+                .filter(this::hasSearchable)
+                .toList();
+    }
+
+    /**
+     * Is the Element is annotated with @Searchable ?
+     * @param el the Element you want to test
+     * @return true if the Element is annotated with @Searchable
+     */
+    private boolean hasSearchable(Element el) {
+        for (AnnotationMirror am : el.getAnnotationMirrors()) {
+            Element annEl = am.getAnnotationType().asElement();
+            if (annEl instanceof TypeElement annType
+                    && annType.getQualifiedName().contentEquals(SEARCHABLE_ANNOTATION)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Find all the searchable fields ( from extended class too ) in a TypeElement
+     * @param type the Element where you wanna get all the @Searchable fields
+     * @return a List of all the @Seachable Fields
+     */
+    List<VariableElement> findAllSearchableFields(TypeElement type) {
+        Map<String, VariableElement> byName = new LinkedHashMap<>();
+        for (VariableElement f : ElementFilter.fieldsIn(elements.getAllMembers(type))) {
+            if (hasSearchable(f) && !f.getModifiers().contains(Modifier.STATIC)) {
+                byName.putIfAbsent(f.getSimpleName().toString(), f);
+            }
+        }
+        return List.copyOf(byName.values());
+    }
+
 
 }

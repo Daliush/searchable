@@ -48,13 +48,13 @@ public class ReflexionUtils {
     }
 
     /**
-     * Generates the implementation name from the interface
-     * @param repoInterface the
+     * Generates the repository implementation name
+     * @param entity the entity
      * @return a class name like InterfaceName + "Impl"
      */
-    public static String generateImplementationName(TypeElement repoInterface) {
-        String ifaceName = repoInterface.getSimpleName().toString();
-        return ifaceName + "Impl";
+    public static String generateImplementationName(TypeElement entity) {
+        String entityName = entity.getSimpleName().toString();
+        return entityName + "GeneratedRepository";
     }
 
     /**
