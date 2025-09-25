@@ -1,6 +1,11 @@
 package fr.daliush.searchable.processor.service;
 
-import com.squareup.javapoet.*;
+import com.squareup.javapoet.AnnotationSpec;
+import com.squareup.javapoet.JavaFile;
+import com.squareup.javapoet.MethodSpec;
+import com.squareup.javapoet.TypeSpec;
+import fr.daliush.searchable.processor.service.methods.exceptions.NoGeneratorException;
+import fr.daliush.searchable.processor.service.methods.generators.MethodGeneratorRegistry;
 import fr.daliush.searchable.processor.utils.ReflexionUtils;
 
 import javax.annotation.processing.Filer;
@@ -11,8 +16,6 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
@@ -21,7 +24,6 @@ import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 public class ImplGenerator {
 
@@ -29,6 +31,7 @@ public class ImplGenerator {
     private final Elements elements;
     private final Messager messager;
     private final Types types;
+    private final MethodGeneratorRegistry methodGeneratorRegistry = new MethodGeneratorRegistry();
     private static final String SEARCHABLE_ANNOTATION = "fr.daliush.searchable.annotations.Searchable";
 
     public ImplGenerator(ProcessingEnvironment env) {
@@ -54,7 +57,7 @@ public class ImplGenerator {
                 .build());
 
         List<VariableElement> searchableFields = findDeclaredSearchableFields(entity);
-        generateMethods(searchableFields, searchClass);
+        generateMethods(searchableFields, searchClass, entity);
 
         JavaFile javaFile = buildJavaFile(pkg, searchClass);
         javaFile.writeTo(filer);
@@ -80,16 +83,23 @@ public class ImplGenerator {
      * Génère les méthodes de la classe repository générée
      * @param searchableFields les fields annotés @Searchable
      * @param type The class to build
+     * @param entity the entity that has the field
      */
-    private void generateMethods(List<VariableElement> searchableFields,TypeSpec.Builder type) {
+    private void generateMethods(List<VariableElement> searchableFields,TypeSpec.Builder type, TypeElement entity) {
         searchableFields.forEach(
                 field -> {
-                    MethodSpec empty = MethodSpec.methodBuilder(field.getSimpleName().toString())
-                            .addModifiers(Modifier.PUBLIC)
-                            .returns(TypeName.VOID)
-                            .build();
-
-                    type.addMethod(empty);
+                    try
+                    {
+                        List<MethodSpec> methods = methodGeneratorRegistry.getMethodSpecsFromField(field);
+                        methods.forEach(type::addMethod);
+                    } catch (NoGeneratorException e) {
+                        messager.printMessage(
+                                Diagnostic.Kind.WARNING,
+                                "Could not generate methods for field " + field.getSimpleName()
+                                + " of class " + entity.getSimpleName()
+                                        + " ( No generator found for type " + field.asType().toString() + " ) "
+                                );
+                    }
                 }
         );
     }
