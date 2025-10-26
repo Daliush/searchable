@@ -1,3 +1,5 @@
+Project paused until i figure how to run the processor automatically ( without waiting for compile ) or how to make autocompletion available before the code generation.
+Because i'll be able to generate the hibernate code, but without autocompletion it's just useless
 maven depedencies :
 ```xml
     <dependencies>
